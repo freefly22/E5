@@ -1,95 +1,98 @@
 # -*- coding: UTF-8 -*-
 import requests as req
-import json,sys,time
+import json, sys, time, os
 import telepot
-#先注册azure应用,确保应用有以下权限:
-#files:	Files.Read.All、Files.ReadWrite.All、Sites.Read.All、Sites.ReadWrite.All
-#user:	User.Read.All、User.ReadWrite.All、Directory.Read.All、Directory.ReadWrite.All
-#mail:  Mail.Read、Mail.ReadWrite、MailboxSettings.Read、MailboxSettings.ReadWrite
-#注册后一定要再点代表xxx授予管理员同意,否则outlook api无法调用
 
+# ===== 从环境变量读取（CI 标准写法）=====
+BOT_TOKEN = os.getenv("TELEBOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
+CLIENT_ID = os.getenv("CONFIG_ID")
+CLIENT_SECRET = os.getenv("CONFIG_KEY")
 
+if not all([BOT_TOKEN, CHAT_ID, CLIENT_ID, CLIENT_SECRET]):
+    raise RuntimeError("Missing required environment variables")
 
+bot = telepot.Bot(BOT_TOKEN)
 
+BASE_DIR = sys.path[0]
+TOKEN_FILE = os.path.join(BASE_DIR, "1.txt")
 
-
-path=sys.path[0]+r'/1.txt'
 num1 = 0
-token=str(sys.argv[1])
-chat_id=str(sys.argv[2])
-bot=telepot.Bot(token)
-fin=None
+fin = None
 
 def send(message):
-    bot.sendMessage(chat_id,message, parse_mode=None, disable_web_page_preview=None, disable_notification=None, reply_to_message_id=None, reply_markup=None)
+    bot.sendMessage(CHAT_ID, message)
 
-def gettoken(refresh_token):
-    headers={'Content-Type':'application/x-www-form-urlencoded'
-            }
-    data={'grant_type': 'refresh_token',
-          'refresh_token': refresh_token,
-          'client_id':id,
-          'client_secret':secret,
-          'redirect_uri':'http://localhost:53682/'
-         }
-    html = req.post('https://login.microsoftonline.com/common/oauth2/v2.0/token',data=data,headers=headers)
-    jsontxt = json.loads(html.text)
-    refresh_token = jsontxt['refresh_token']
-    access_token = jsontxt['access_token']
-    with open(path, 'w+') as f:
-        f.write(refresh_token)
-    return access_token
-def main():
-    fo = open(path, "r+")
-    refresh_token = fo.read()
-    fo.close()
-    global num1
-    global fin
-    fin = localtime = time.asctime( time.localtime(time.time()) )
-    access_token=gettoken(refresh_token)
-    headers={
-    'Authorization':access_token,
-    'Content-Type':'application/json'
+def gettoken(old_refresh_token):
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    data = {
+        'grant_type': 'refresh_token',
+        'refresh_token': old_refresh_token,
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+        'redirect_uri': 'http://localhost:53682/'
     }
-    try:
-        if req.get(r'https://graph.microsoft.com/v1.0/me/drive/root',headers=headers).status_code == 200:
-            num1+=1
-            print("1调用成功"+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/drive',headers=headers).status_code == 200:
-            num1+=1
-            print("2调用成功"+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/drive/root',headers=headers).status_code == 200:
-            num1+=1
-            print('3调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/users ',headers=headers).status_code == 200:
-            num1+=1
-            print('4调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/messages',headers=headers).status_code == 200:
-            num1+=1
-            print('5调用成功'+str(num1)+'次')    
-        if req.get(r'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messageRules',headers=headers).status_code == 200:
-            num1+=1
-            print('6调用成功'+str(num1)+'次')    
-        if req.get(r'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta',headers=headers).status_code == 200:
-            num1+=1
-            print('7调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/drive/root/children',headers=headers).status_code == 200:
-            num1+=1
-            print('8调用成功'+str(num1)+'次')
-        if req.get(r'https://api.powerbi.com/v1.0/myorg/apps',headers=headers).status_code == 200:
-            num1+=1
-            print('8调用成功'+str(num1)+'次') 
-        if req.get(r'https://graph.microsoft.com/v1.0/me/mailFolders',headers=headers).status_code == 200:
-            num1+=1
-            print('9调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/outlook/masterCategories',headers=headers).status_code == 200:
-            num1+=1
-            print('10调用成功'+str(num1)+'次')
-            print('此次运行结束时间为 :', localtime)
-    except:
-        print("pass")
-        pass
+
+    r = req.post(
+        'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+        data=data,
+        headers=headers
+    )
+
+    jsontxt = r.json()
+
+    if 'access_token' not in jsontxt:
+        raise RuntimeError(f"Token refresh failed: {jsontxt}")
+
+    # 有就更新，没有就沿用旧的
+    new_refresh_token = jsontxt.get('refresh_token', old_refresh_token)
+
+    with open(TOKEN_FILE, 'w') as f:
+        f.write(new_refresh_token)
+
+    return jsontxt['access_token']
+
+def main():
+    global num1, fin
+
+    fin = time.asctime(time.localtime())
+
+    # 第一次 CI 运行时兜底
+    if not os.path.exists(TOKEN_FILE):
+        raise RuntimeError("refresh_token file 1.txt not found")
+
+    with open(TOKEN_FILE, 'r') as f:
+        refresh_token = f.read().strip()
+
+    access_token = gettoken(refresh_token)
+
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json'
+    }
+
+    urls = [
+        'https://graph.microsoft.com/v1.0/me/drive/root',
+        'https://graph.microsoft.com/v1.0/me/drive',
+        'https://graph.microsoft.com/v1.0/drive/root',
+        'https://graph.microsoft.com/v1.0/users',
+        'https://graph.microsoft.com/v1.0/me/messages',
+        'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messageRules',
+        'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta',
+        'https://graph.microsoft.com/v1.0/me/drive/root/children',
+        'https://api.powerbi.com/v1.0/myorg/apps',
+        'https://graph.microsoft.com/v1.0/me/mailFolders',
+        'https://graph.microsoft.com/v1.0/me/outlook/masterCategories'
+    ]
+
+    for i, url in enumerate(urls, 1):
+        r = req.get(url, headers=headers)
+        if r.status_code == 200:
+            num1 += 1
+            print(f"{i} 调用成功 {num1} 次")
+
 for _ in range(8):
     main()
-msg='[AutoApiSecret]已成功调用{}次，结束时间为{}'.format(num1,fin)
+
+msg = f"[AutoApiSecret] 已成功调用 {num1} 次，结束时间为 {fin}"
 send(msg)
