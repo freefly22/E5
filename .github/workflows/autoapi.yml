@@ -18,7 +18,8 @@ jobs:
           cache: "pip"
 
       - name: Install requirements
-        run: pip install requests telepot
+        run: pip install -r requirements.txt
+
 
       - name: Test Api
         env:
