@@ -20,13 +20,12 @@ jobs:
       - name: Install requirements
         run: pip install requests telepot
 
-
       - name: Test Api
         env:
-          CONFIG_ID: ${{ secrets.CONFIG_ID }}
-          CONFIG_KEY: ${{ secrets.CONFIG_KEY }}
           TELEBOT_TOKEN: ${{ secrets.TELEBOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+          CONFIG_ID: ${{ secrets.CONFIG_ID }}
+          CONFIG_KEY: ${{ secrets.CONFIG_KEY }}
         run: |
           echo "$(date +"%Y-%m-%d %H:%M:%S") begin" > time.log
           python 1.py
