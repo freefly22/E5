@@ -1,7 +1,7 @@
 #自动调用api保活，加密版
 name: Auto Api Secret
 
-on: 
+on:
   release:
     types: [published, created, edited]
   push:
@@ -14,14 +14,19 @@ on:
   workflow_dispatch:
     inputs:
    
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@master
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Set up Python #安装python
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v5
       with:
         python-version: 3.11
     - name: Install requirements
@@ -52,7 +57,11 @@ jobs:
         git config --global user.email '${{ secrets.EMAIL }}'
         git config --global user.name ccknbc
         git add .
-        git commit -m "update new refresh_token" -a
+        if [ -n "$(git status --porcelain)" ]; then
+          git commit -m "update new refresh_token" -a
+        else
+          echo "No changes to commit."
+        fi
     - name: Push changes
       uses: ad-m/github-push-action@master
       with:
