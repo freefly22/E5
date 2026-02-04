@@ -14,14 +14,19 @@ import telepot
 
 
 path=sys.path[0]+r'/1.txt'
-num1 = 0
-token=str(sys.argv[1])
-chat_id=str(sys.argv[2])
-bot=telepot.Bot(token)
 fin=None
+token = str(sys.argv[1]) if len(sys.argv) > 1 else ""
+chat_id = str(sys.argv[2]) if len(sys.argv) > 2 else ""
+bot = telepot.Bot(token) if token and chat_id else None
 
 def send(message):
-    bot.sendMessage(chat_id,message, parse_mode=None, disable_web_page_preview=None, disable_notification=None, reply_to_message_id=None, reply_markup=None)
+    if not bot:
+        print(message)
+        return
+    try:
+        bot.sendMessage(chat_id,message, parse_mode=None, disable_web_page_preview=None, disable_notification=None, reply_to_message_id=None, reply_markup=None)
+    except Exception as exc:
+        print(f"Telegram send failed: {exc}")
 
 def gettoken(refresh_token):
     headers={'Content-Type':'application/x-www-form-urlencoded'
@@ -34,62 +39,81 @@ def gettoken(refresh_token):
          }
     html = req.post('https://login.microsoftonline.com/common/oauth2/v2.0/token',data=data,headers=headers)
     jsontxt = json.loads(html.text)
-    refresh_token = jsontxt['refresh_token']
+    if 'access_token' not in jsontxt:
+        raise RuntimeError(f"token refresh failed: {jsontxt}")
+    refresh_token = jsontxt.get('refresh_token', refresh_token)
     access_token = jsontxt['access_token']
-    with open(path, 'w+') as f:
-        f.write(refresh_token)
-    return access_token
-def main():
-    fo = open(path, "r+")
-    refresh_token = fo.read()
-    fo.close()
-    global num1
-    global fin
-    fin = localtime = time.asctime( time.localtime(time.time()) )
-    access_token=gettoken(refresh_token)
+    return access_token, refresh_token
+
+def run_calls(access_token):
     headers={
     'Authorization':access_token,
     'Content-Type':'application/json'
     }
-    try:
-        if req.get(r'https://graph.microsoft.com/v1.0/me/drive/root',headers=headers).status_code == 200:
-            num1+=1
-            print("1调用成功"+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/drive',headers=headers).status_code == 200:
-            num1+=1
-            print("2调用成功"+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/drive/root',headers=headers).status_code == 200:
-            num1+=1
-            print('3调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/users ',headers=headers).status_code == 200:
-            num1+=1
-            print('4调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/messages',headers=headers).status_code == 200:
-            num1+=1
-            print('5调用成功'+str(num1)+'次')    
-        if req.get(r'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messageRules',headers=headers).status_code == 200:
-            num1+=1
-            print('6调用成功'+str(num1)+'次')    
-        if req.get(r'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta',headers=headers).status_code == 200:
-            num1+=1
-            print('7调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/drive/root/children',headers=headers).status_code == 200:
-            num1+=1
-            print('8调用成功'+str(num1)+'次')
-        if req.get(r'https://api.powerbi.com/v1.0/myorg/apps',headers=headers).status_code == 200:
-            num1+=1
-            print('8调用成功'+str(num1)+'次') 
-        if req.get(r'https://graph.microsoft.com/v1.0/me/mailFolders',headers=headers).status_code == 200:
-            num1+=1
-            print('9调用成功'+str(num1)+'次')
-        if req.get(r'https://graph.microsoft.com/v1.0/me/outlook/masterCategories',headers=headers).status_code == 200:
-            num1+=1
-            print('10调用成功'+str(num1)+'次')
-            print('此次运行结束时间为 :', localtime)
-    except:
-        print("pass")
-        pass
-for _ in range(8):
-    main()
-msg='[AutoApiSecret]已成功调用{}次，结束时间为{}'.format(num1,fin)
-send(msg)
+    endpoints = [
+        ('1', r'https://graph.microsoft.com/v1.0/me/drive/root'),
+        ('2', r'https://graph.microsoft.com/v1.0/me/drive'),
+        ('3', r'https://graph.microsoft.com/v1.0/drive/root'),
+        ('4', r'https://graph.microsoft.com/v1.0/users '),
+        ('5', r'https://graph.microsoft.com/v1.0/me/messages'),
+        ('6', r'https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messageRules'),
+        ('7', r'https://graph.microsoft.com/v1.0/me/mailFolders/Inbox/messages/delta'),
+        ('8', r'https://graph.microsoft.com/v1.0/me/drive/root/children'),
+        ('9', r'https://api.powerbi.com/v1.0/myorg/apps'),
+        ('10', r'https://graph.microsoft.com/v1.0/me/mailFolders'),
+        ('11', r'https://graph.microsoft.com/v1.0/me/outlook/masterCategories'),
+    ]
+    success = 0
+    failed = []
+    for name, url in endpoints:
+        status = req.get(url, headers=headers).status_code
+        if status == 200:
+            success += 1
+            print(f"{name}调用成功{success}次")
+        else:
+            failed.append((name, status))
+    return success, failed
+
+def run_account(refresh_token, rounds=8):
+    total_success = 0
+    total_failed = []
+    current_token = refresh_token
+    for _ in range(rounds):
+        access_token, current_token = gettoken(current_token)
+        success, failed = run_calls(access_token)
+        total_success += success
+        total_failed.extend(failed)
+    return total_success, total_failed, current_token
+
+def load_refresh_tokens():
+    with open(path, "r+") as fo:
+        tokens = [line.strip() for line in fo.read().splitlines() if line.strip()]
+    if not tokens:
+        raise RuntimeError("no refresh_token found in 1.txt")
+    return tokens
+
+def save_refresh_tokens(tokens):
+    with open(path, 'w+') as f:
+        f.write("\n".join(tokens))
+
+def main():
+    global fin
+    fin = localtime = time.asctime(time.localtime(time.time()))
+    tokens = load_refresh_tokens()
+    updated_tokens = []
+    summary = []
+    for index, refresh_token in enumerate(tokens, start=1):
+        try:
+            success, failed, new_token = run_account(refresh_token)
+            updated_tokens.append(new_token)
+            summary_line = f"账号{index}: 成功{success}次, 失败{len(failed)}次"
+            summary.append(summary_line)
+            send(f"[AutoApiSecret] {summary_line}")
+        except Exception as exc:
+            updated_tokens.append(refresh_token)
+            summary.append(f"账号{index}: 运行失败 ({exc})")
+    save_refresh_tokens(updated_tokens)
+    msg='[AutoApiSecret]运行结束时间为{}\\n{}'.format(localtime, "\\n".join(summary))
+    send(msg)
+
+main()
