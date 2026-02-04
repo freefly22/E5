@@ -79,7 +79,9 @@ AutoApi系列：AutoApi、AutoApiSecret、AutoApiSR、AutoApiS
   
 * 根据[原教程](https://blog.432100.xyz/index.php/archives/50/)获取应用id、机密、refresh_token（自己复制保存，注意区分id机密，别弄混了）
    
-  然后在线编辑你项目里的1.txt，将整个refresh_token覆盖粘贴进去（里面是我的数据，先删掉或者覆盖掉）。（千万不要改1.py）
+  然后在线编辑你项目里的1.txt，将refresh_token粘贴进去（里面是我的数据，先删掉或者覆盖掉）。（千万不要改1.py）
+  
+  **多账号模式（新增）**：1.txt 里可以写多行，每行一个 refresh_token，程序会逐个账号调用并在结束时汇总结果（失败不会影响其他账号）。
   
     > refresh_token位置如图下。复制refresh_token紧接着的双引号里的内容（红竖线框起来的），不要把双引号复制进去。复制进1.txt后，留意结尾不要留空格或者空行
     (其实浏览器地址栏地址也能看出，不过还是保险点好，你也可以借助插件完成)
