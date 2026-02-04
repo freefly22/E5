@@ -34,7 +34,9 @@ def gettoken(refresh_token):
          }
     html = req.post('https://login.microsoftonline.com/common/oauth2/v2.0/token',data=data,headers=headers)
     jsontxt = json.loads(html.text)
-    refresh_token = jsontxt['refresh_token']
+    if 'access_token' not in jsontxt:
+        raise RuntimeError(f"token refresh failed: {jsontxt}")
+    refresh_token = jsontxt.get('refresh_token', refresh_token)
     access_token = jsontxt['access_token']
     with open(path, 'w+') as f:
         f.write(refresh_token)
